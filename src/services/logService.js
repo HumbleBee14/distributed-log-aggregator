@@ -18,18 +18,19 @@ async function storeLog(logData) {
     created_at: Date.now().toString()
   };
   
+  const pipeline = redisClient.multi();
+  
   // storing log entry as a hash
-  await redisClient.hSet(logKey, logEntry);
-  
-  // expiry for log entry
-  await redisClient.expire(logKey, config.logExpirySeconds);
-  
-  // Adding the log ID to a sorted set for this service, using timestamp as score for ordering
+  pipeline.hSet(logKey, logEntry);
+
+  pipeline.expire(logKey, config.logExpirySeconds);
+
   const timestampScore = new Date(timestamp).getTime();
-  await redisClient.zAdd(serviceKey, { score: timestampScore, value: logId });
-  
-  // seeting expiry for service set
-  await redisClient.expire(serviceKey, config.logExpirySeconds);
+  pipeline.zAdd(serviceKey, { score: timestampScore, value: logId });
+
+  pipeline.expire(serviceKey, config.logExpirySeconds);
+
+  await pipeline.exec();
   
   return {
     id: logId,
@@ -51,15 +52,18 @@ async function queryLogs(service, start, end) {
     return [];
   }
   
-  const logs = [];
-  for (const logId of logIds) {
-    const log = await redisClient.hGetAll(getLogKey(logId));
-    if (log && Object.keys(log).length > 0) {
-      logs.push(log);
-    }
-  }
+  const pipeline = redisClient.multi();
   
-  logs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  logIds.forEach(logId => {
+    pipeline.hGetAll(getLogKey(logId));
+  });
+  
+  const results = await pipeline.exec();
+  
+  const logs = (results || [])
+    .map(result => result)
+    .filter(log => log !== null && Object.keys(log).length > 0)
+    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   
   return logs.map(log => ({
     timestamp: log.timestamp,
