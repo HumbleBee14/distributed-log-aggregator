@@ -90,3 +90,6 @@ The implementation uses Redis transactions to ensure atomicity and efficiency of
 ## Scaling
 
 The service can be horizontally scaled by running multiple instances behind a load balancer. The Redis backend can be configured as a cluster for additional scalability.
+
+# Golang Version
+https://github.com/HumbleBee14/distributed-log-aggregator-go
